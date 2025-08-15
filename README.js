@@ -1,36 +1,59 @@
-# draft
-{item.mriList.length > 0 && (
-                          <View style={{backgroundColor: '#fff', width: '100%',display: 'flex', flexDirection: 'row', flexWrap: 'wrap'}}>
-                            {/* 第一行：表头 */}
-                            <View style={{width: '32%', height: 30, border: '1px solid #f0f0f0', justifyContent: 'center'}}>
-                              <Text style={{fontSize: 10, fontWeight: 'bold', textAlign: 'center'}}>设备名称</Text>
-                            </View>
-                            <View style={{width: '32%', height: 30, border: '1px solid #f0f0f0', justifyContent: 'center'}}>
-                              <Text style={{fontSize: 10, fontWeight: 'bold', textAlign: 'center'}}>SN</Text>
-                            </View>
-                            <View style={{width: '32%', height: 30, border: '1px solid #f0f0f0', justifyContent: 'center'}}>
-                              <Text style={{fontSize: 10, fontWeight: 'bold', textAlign: 'center'}}>资产编号</Text>
-                            </View>
+import { View, Text, Alert, TouchableOpacity } from 'react-native';
 
-                            {/* 数据行：for循环 */}
-                            {item.mriList.map((device, index) => (
-                              <React.Fragment key={index}>
-                                <View style={{width: '32%', height: 30, border: '1px solid #f0f0f0', justifyContent: 'center'}}>
-                                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                                    <Text style={{fontSize: 9, paddingHorizontal: 4}}>{device.device_name || '-'}</Text>
-                                  </ScrollView>
-                                </View>
-                                <View style={{width: '32%', height: 30, border: '1px solid #f0f0f0', justifyContent: 'center'}}>
-                                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                                    <Text style={{fontSize: 9, paddingHorizontal: 4}}>{device.serial || '-'}</Text>
-                                  </ScrollView>
-                                </View>
-                                <View style={{width: '32%', height: 30, border: '1px solid #f0f0f0', justifyContent: 'center'}}>
-                                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                                    <Text style={{fontSize: 9, paddingHorizontal: 4}}>{device.asset_number || '-'}</Text>
-                                  </ScrollView>
-                                </View>
-                              </React.Fragment>
-                            ))}
-                          </View>
-                        )}
+{item.mriList.length > 0 && (
+  <View
+    style={{
+      backgroundColor: '#fff',
+      width: '100%',
+      flexDirection: 'row',
+      flexWrap: 'wrap'
+    }}
+  >
+    {/* 表头 */}
+    {['设备名称', 'SN', '资产编号'].map((header, idx) => (
+      <View
+        key={idx}
+        style={{
+          width: '32%',
+          height: 30,
+          borderWidth: 1,
+          borderColor: '#f0f0f0',
+          justifyContent: 'center',
+          alignItems: 'center'
+        }}
+      >
+        <Text style={{ fontSize: 10, fontWeight: 'bold', textAlign: 'center' }}>
+          {header}
+        </Text>
+      </View>
+    ))}
+
+    {/* 数据行 */}
+    {item.mriList.map((device, index) => (
+      <React.Fragment key={index}>
+        {['device_name', 'serial', 'asset_number'].map((key, i) => (
+          <TouchableOpacity
+            key={i}
+            style={{
+              width: '32%',
+              height: 30,
+              borderWidth: 1,
+              borderColor: '#f0f0f0',
+              justifyContent: 'center',
+              paddingHorizontal: 4
+            }}
+            onPress={() => Alert.alert('完整内容', device[key] || '-')}
+          >
+            <Text
+              style={{ fontSize: 9 }}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {device[key] || '-'}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </React.Fragment>
+    ))}
+  </View>
+)}
