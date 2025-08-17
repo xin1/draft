@@ -1,67 +1,35 @@
-export const getTaskListAction = (payload, dispatch, setLoading) => {
-  getRoomMriDeviceList(payload).then((mriRes) => {
-    console.log('getRoomMriDeviceList===>', mriRes);
-    let mriList = []
-    if(mriRes?.data?.items) {
-      mriList = mriRes?.data?.items.map((item) => {
-        return {
-          ...item,
-          device_type_id: item?.lookup_item?._id || item?.lookup_item?.id
-        }
-      })
-    }
-    getTaskList(payload).then((res) => {
-      const queryDataList = res.data.records.map((item) => {
-        const deviceType = item.deviceType?._id || item.deviceType?.id
-        return {
-          ...item,
-          mriList: mriList.filter((mriItem) => mriItem.device_type_id == deviceType),
-          result: 'normal',
-          errorDesc: '',
-          errorSub: {
-            apiName: 'errorNotReslove'
-          },
-          photoList: []
-        };
-      });
-      // const taskList = queryDataList.sort((a, b) => {
-      //   return a.sortNumber - b.sortNumber;
-      // });
-      let sortList = new Array(queryDataList.length);
-      for (let task of queryDataList) {
-        if (task.sortNumber === null) {
-          sortList = queryDataList;
-        } else {
-          sortList[task['sortNumber']] = task;
-        }
-      }
-      sortList = sortList.filter(Boolean);
-      console.log('getTaskListAction taskList', sortList);
-      let isSubmit = true;
-      for (let i = 0; i < sortList.length; i++) {
-        // 拉取任务列表的时候, 如果计划需要拍照 && 基础设置一定得拍照
-        // 不拍照的话不允许允许提交
-        const item = sortList[i];
-        const { isMustPhoto, isPhoto } = item;
-        if (isMustPhoto.apiName === 'allow' && isPhoto.apiName === 'need') {
-          isSubmit = false;
-          break;
-        }
-      }
-      dispatch({
-        type: GETTASKLIST,
-        payload: {
-          taskList: sortList
-        }
-      });
-      dispatch({
-        type: UPDATETASKLISTISSUBMITSTATUS,
-        payload: {
-          isSubmit: isSubmit
-        }
-      });
-      setLoading(false);
-    });
-  })
+                        {item.mriList.length > 0 && (
+                          <View style={{backgroundColor: '#fff', width: '100%',display: 'flex', flexDirection: 'row', flexWrap: 'wrap'}}>
+                            {/* 第一行：表头 */}
+                            <View style={{width: '32%', height: 30, border: '1px solid #f0f0f0', justifyContent: 'center',paddingLeft: 3}}>
+                              <Text style={{fontSize: 11, fontWeight: 'bold', textAlign: 'center'}}> 设备名称 </Text>
+                            </View>
+                            <View style={{width: '30%', height: 30, border: '1px solid #f0f0f0', justifyContent: 'center',paddingLeft: 3}}>
+                              <Text style={{fontSize: 11, fontWeight: 'bold', textAlign: 'center'}}> SN </Text>
+                            </View>
+                            <View style={{width: '30%', height: 30, border: '1px solid #f0f0f0', justifyContent: 'center',paddingLeft: 3}}>
+                              <Text style={{fontSize: 11, fontWeight: 'bold', textAlign: 'center'}}> 资产编号 </Text>
+                            </View>
 
-};
+                            {/* 数据行：for循环 */}
+                            {item.mriList.map((device, index) => (
+                              <React.Fragment key={index}>
+                                <View style={{width: '32%', height: 30, border: '1px solid #f0f0f0', justifyContent: 'center',paddingLeft: 3}}>
+                                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                    <Text style={{fontSize: 10, paddingHorizontal: 4}}>{device.device_name || '-'}</Text>
+                                  </ScrollView>
+                                </View>
+                                <View style={{width: '30%', height: 30, border: '1px solid #f0f0f0', justifyContent: 'center',paddingLeft: 3}}> 
+                                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                    <Text style={{fontSize: 10, paddingHorizontal: 4}}>{device.serial || '-'}</Text>
+                                  </ScrollView>
+                                </View>
+                                <View style={{width: '30%', height: 30, border: '1px solid #f0f0f0', justifyContent: 'center',paddingLeft: 3}}>
+                                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                    <Text style={{fontSize: 10, paddingHorizontal: 4}}>{device.asset_number || '-'}</Text>
+                                  </ScrollView>
+                                </View>
+                              </React.Fragment>
+                            ))}
+                          </View>
+                        )}
