@@ -1,717 +1,935 @@
-// https://apaas.feishuapp.cn/ae/api-doc/namespaces/package_copysa30x__c/doc-shares/Mwnb3zlL8om/token-getToken?lane_id=master
-
-import httpService from '../utils/services/httpService';
+import {
+  GETROOMTASKLIST,
+  GETROOMTASKHISTORYLIST,
+  GETTASKLIST,
+  GETTASKHISTORYLIST,
+  UPDATETASKLISTISSUBMITSTATUS,
+  SETFAUTYPELTLIST
+} from '../constants/task';
+import {
+  getTaskList,
+  getRoomMriDeviceList,
+  getRoomTaskList,
+  getFaultTypeList,
+  uploadItemTaskResult,
+  batchUpdateTaskHistoryRecords,
+  batchUpdateTask,
+  updateRoomTaskResult,
+  getHistoryTaskList,
+  updateRoomTaskHistory,
+  getFileInfo, getOccupiedRoomTaskList
+} from '../api/task';
 import Taro from '@tarojs/taro';
-import apiConfig from '../utils/services/apiConfig';
+import i18n from '../pages/i18n';
 
 /**
- * 获取房间任务列表
- * @param {String} siteId
- * @param {Array} filter
- * @param {Number} offset
- * @returns
+ * 提交巡检设备层面记录
+ * @param {Array} taskList //任务列表
+ * @param {String} type //按钮类型:roomUse、notNeed、start
+ *  @param {String} roomTaskId
+ *  @param {Object} userInfo
  */
-export const getRoomTaskList = (siteId, filter, offset = 0) => {
-  const queryList = [
-    {
-      leftValue: '_isDeleted',
-      operator: 'eq',
-      rightValue: false
-    },
-    {
-      leftValue: 'site_id._id',
-      operator: 'eq',
-      rightValue: siteId
-    },
-    {
-      leftValue: 'cycle_time', //计划未被删除
-      operator: 'neq',
-      rightValue: null
-    },
-    {
-      leftValue: 'sla_continues_inspect', //继续巡检
-      operator: 'eq',
-      rightValue: true
-    }
-  ];
-  queryList.push(...filter);
-
-  const data = {
-    fields: [
-      '_id',
-      'site_id',
-      'floor',
-      'room_type',
-      'room',
-      'startDate',
-      'endDate',
-      'floornumber',
-      'option_emeakit',
-      'referenceField_y8sqynx',
-      'number_days_remaining_executable',
-      'referenceField_showusing',
-      'planObject',
-      'plan_timezone',
-      'cycle_time',
-      'taskResult',
-      'user',
-      'inspection_room',
-      'plan_end_date'
-    ],
-    filter: [
-      {
-        and: queryList
-      }
-    ],
-    sort: [
-      {
-        field: 'option_emeakit',
-        direction: 'desc'
+export const submitTask = (taskList, type, roomTaskId, userInfo, noNeedParams = null, callback) => {
+  const { userId, userNewId } = userInfo;
+  // 设备层任务创建参数
+  let batchCreateObject = {
+    records: []
+  };
+  // 房间层任务创建参数
+  let batchUpdateTaskObject = {
+    records: []
+  };
+  let roomTaskResult = 'normal';
+  let roomFileIdList = [];
+  for (let index = 0; index < taskList.length; index++) {
+    const t = taskList[index];
+    let taskData = {
+      task_id: {
+        _id: t._id
       },
-      {
-        field: 'floornumber',
-        direction: 'asc'
+      item_id: {
+        _id: t.item_id._id
       },
-      // {
-      //   field: 'meetingNumber',
-      //   direction: 'asc'
-      // },
-      {
-        field: 'inspection_room',
-        direction: 'asc'
+      option_n78g80c: {
+        apiName: t.result
+      },
+      actual_inspector: {
+        _id: parseInt(userNewId)
+      },
+      option_cooh79w: {
+        apiName: 'option_d0bI0cu' //任务已经完成 状态变更为已完成
+      },
+      data_source: {
+        apiName: 'option_54b9lm0'
+      },
+      roomresult: {
+        _id: parseInt(roomTaskId)
+      },
+      item_type: {
+        _id: t.item_type._id
+      },
+      deviceTypeObject: {
+        _id: t.item_type._id
+      },
+      siteInfoObject: {
+        _id: t.site_id._id
+      },
+      region: {
+        _id: t.region._id
       }
-    ],
-    limit: parseInt(process.env.TARO_APP_LIMIT),
-    offset: offset
-  };
-  return httpService.post(
-    `/api/data/v1/namespaces/package_copysa30x__c/objects/object_ihdrccm/records`,
-    { data }
-  );
-};
-
-/**
- * 创建巡检设备层面记录
- * @param {Object} batchCreateObject //
- * @param {String} planId //
- * @param {String} overDate //
- */
-export const uploadItemTaskResult = (batchCreateObject, planId, overDate) => {
-  const data = {
-    params: {
-      token: Taro.getStorageSync('TOKEN'),
-      url: 'https://ae-openapi.feishu.cn/api/data/v1/namespaces/package_copysa30x__c/objects/record_list/batchCreate',
-      patchdata: batchCreateObject,
-      planid: planId,
-      overdate: overDate
-    }
-  };
-  return httpService.post(
-    `/api/cloudfunction/v1/namespaces/package_copysa30x__c/invoke/uploadItemTaskResult`,
-    { data }
-  );
-};
-/**
- * 批量更新任务列表
- * @param {Object} batchUpdateTaskObject
- * @returns
- */
-export const batchUpdateTask = (batchUpdateTaskObject) => {
-  const data = {
-    params: {
-      token: Taro.getStorageSync('TOKEN'),
-      url: 'https://ae-openapi.feishu.cn/api/data/v1/namespaces/package_copysa30x__c/objects/task_list/batchUpdate',
-      patchdata: batchUpdateTaskObject
-    }
-  };
-  return httpService.post(
-    `/api/cloudfunction/v1/namespaces/package_copysa30x__c/invoke/patchupdate`,
-    { data }
-  );
-};
-/**
- * 批量更新设备任务历史记录
- * @param {Object} batchUpdateTaskObject
- * @returns
- */
-export const batchUpdateTaskHistoryRecords = (batchUpdateTaskObject) => {
-  const data = {
-    params: {
-      token: Taro.getStorageSync('TOKEN'),
-      url: 'https://ae-openapi.feishu.cn/api/data/v1/namespaces/package_copysa30x__c/objects/record_list/batchUpdate',
-      patchdata: batchUpdateTaskObject
-    }
-  };
-  return httpService.post(
-    `/api/cloudfunction/v1/namespaces/package_copysa30x__c/invoke/patchupdate`,
-    { data }
-  );
-};
-
-/**
- * 更新房间巡检结果
- * @param {*} roomTaskId
- * @param {*} roomTaskResult
- * @param {*} roomFileIdList
- * @param {*} userId
- * @param {*} notNeedText
- * @param {*} notNeedPatrol
- * @returns
- */
-export const updateRoomTaskResult = (
-  roomTaskId,
-  roomTaskResult,
-  roomFileIdList,
-  userNewId,
-  notNeedText,
-  notNeedPatrol
-) => {
-  const data = {
-    params: {
-      token: Taro.getStorageSync('TOKEN'),
-      url:
-        'https://ae-openapi.feishu.cn/api/data/v1/namespaces/package_copysa30x__c/objects/object_ihdrccm/' +
-        roomTaskId,
-      patchdata: {
-        taskResult: {
-          apiName: roomTaskResult
-        },
-        taskState: {
-          apiName: 'done'
-        },
-        user: {
-          _id: parseInt(userNewId)
-        },
-        taskPhoto: roomFileIdList,
-        notneedText: notNeedText,
-        datetime_afsqnsu: parseInt(new Date().getTime()),
-        timeZoneInformation:
-          0 - parseInt(new Date().getTimezoneOffset()) / 60 > 0
-            ? `UTC+${0 - parseInt(new Date().getTimezoneOffset()) / 60}`
-            : `UTC${0 - parseInt(new Date().getTimezoneOffset()) / 60}`,
-        notNeedPatrol: notNeedPatrol
-      }
-    }
-  };
-  return httpService.post(
-    `/api/cloudfunction/v1/namespaces/package_copysa30x__c/invoke/patchupdate`,
-    { data }
-  );
-};
-
-/**
- * 更新房间巡检历史
- * @param {*} roomTaskId
- * @param {*} roomTaskResult
- * @param {*} roomFileIdList
- * @param {*} notNeedText
- * @param {*} notNeedPatrol
- * @returns
- */
-export const updateRoomTaskHistory = (
-  roomTaskId,
-  roomTaskResult,
-  roomFileIdList,
-  notNeedText,
-  notNeedPatrol
-) => {
-  const data = {
-    params: {
-      token: Taro.getStorageSync('TOKEN'),
-      url:
-        'https://ae-openapi.feishu.cn/api/data/v1/namespaces/package_copysa30x__c/objects/object_ihdrccm/' +
-        roomTaskId,
-      patchdata: {
-        taskResult: {
-          apiName: roomTaskResult
-        },
-        notneedText: notNeedText,
-        taskPhoto: roomFileIdList,
-        notNeedPatrol: notNeedPatrol
-      }
-    }
-  };
-  return httpService.post(
-    `/api/cloudfunction/v1/namespaces/package_copysa30x__c/invoke/patchupdate`,
-    { data }
-  );
-};
-
-/**
- * 获取设备任务列表
- */
-export const getTaskList = (params) => {
-  let isOccupied = params?.isOccupied;
-  const and = [
-    {
-      leftValue: 'plan_list_id',
-      operator: 'eq',
-      rightValue: params.planId
-    },
-    {
-      leftValue: 'site_id._id',
-      operator: 'eq',
-      rightValue: params.siteId
-    },
-    {
-      leftValue: 'item_id.lookup_0py8fla._id',
-      operator: 'eq',
-      rightValue: `${params.floorId}`
-    },
-    {
-      leftValue: 'item_id.lookup_at96fh8._id',
-      operator: 'eq',
-      rightValue: `${params.roomId}`
-    },
-    {
-      leftValue: 'item_id.option_j8wwovx', //设备启用
-      operator: 'eq',
-      rightValue: 'option_iuacks9'
-    },
-    {
-      or: [
-        {
-          leftValue: 'delete_status', //任务未被删除
-          operator: 'eq',
-          rightValue: 'option_using'
-        },
-        {
-          leftValue: 'delete_status', //任务未被删除
-          operator: 'eq',
-          rightValue: null
+    };
+    if (type === 'roomUse') {
+      roomTaskResult = 'roomuse';
+      taskData['taskPhoto'] = [];
+      taskData['option_n78g80c'] = {
+        apiName: 'roomuse'
+      };
+    } else if (type === 'noNeed') {
+      roomTaskResult = 'notneed';
+      taskData['taskPhoto'] = [];
+      taskData['option_n78g80c'] = {
+        apiName: 'notneed'
+      };
+    } else {
+      taskData.taskPhoto = [];
+      if (Array.isArray(t.fileIdList) && t.fileIdList.length > 0) {
+        for (let fileId of t.fileIdList) {
+          roomFileIdList.push({
+            fileId: fileId
+          });
+          taskData.taskPhoto.push({
+            fileId: fileId
+          });
         }
-      ]
+      }
+
+      if (t.result === 'error') {
+        roomTaskResult = 'error';
+        taskData['errorSub'] = t.errorSub;
+        taskData['serviceList'] = t.faultType;
+        taskData['richText_4ynjot5'] = {
+          raw: t.errorDesc
+        };
+        taskData['errorText'] = t.errorDesc;
+      } else {
+        taskData['richText_4ynjot5'] = {
+          raw: ''
+        };
+      }
     }
-  ];
-  // 普通任务才加上这俩限制条件, 补巡检不用加
-  if (!isOccupied) {
-    and.push({
-      leftValue: 'plan_list_id.option_iqefg30', // 进行中任务
-      operator: 'eq',
-      rightValue: 'option_yy6r7c0'
-    });
-    and.push({
-      leftValue: 'complete_status', // 未完成的任务
-      operator: 'eq',
-      rightValue: 'undone'
+    batchCreateObject.records.push(taskData);
+    batchUpdateTaskObject.records.push({
+      _id: t._id,
+      complete_status: {
+        apiName: 'done'
+      },
+      option_fm1cv3f: {
+        apiName: 'option_d0bl0cu'
+      }
     });
   }
-  const data = {
-    fields: [
-      '_id',
-      'is_error_desc_info',
-      'contentDesc',
-      'delete_status',
-      'isShowNothaveitem',
-      'referenceField_ghe7oxh',
-      'taskState',
-      'isPhoto',
-      'room_type',
-      'item_id',
-      'isMustPhoto',
-      'isUseAlbum',
-      'isShowErrorNotResolve',
-      'isShowErrorResolve',
-      'isShowErrorType',
-      'site_id',
-      'roomInfo',
-      'plan_list_id',
-      'deviceType',
-      'referenceField_hf4dmgc',
-      'referenceField_ghe7oxh',
-      'referenceField_khku11h',
-      'referenceField_cxyom0w',
-      'region',
-      'item_type',
-      'sortNumber',
-      'referenceField_jfjimls',
-      'option_1xe2tou',
-      'text_l4qsi3k',
-      'contentName',
-      'referenceField_pw4kfh1'
-    ],
-    filter: [
-      {
-        and: and
+  console.log('batchCreateObject', batchCreateObject);
+  const planId = taskList[0].plan_list_id._id;
+  const overDate = taskList[0].referenceField_jfjimls;
+  const notNeedText = noNeedParams ? noNeedParams.desc : '';
+  const notNeedPatrol = noNeedParams ? { _id: noNeedParams.id } : null;
+  updateRoomTaskResult(
+    roomTaskId,
+    roomTaskResult,
+    roomFileIdList,
+    userNewId,
+    notNeedText,
+    notNeedPatrol
+  )
+    .then((res) => {
+      console.log('updateRoomTaskResult success', res);
+      if (res.data.result.code === '0') {
+        uploadItemTaskResult(batchCreateObject, planId, overDate)
+          .then((ress) => {
+            if (res.code === '0') {
+              console.log('uploadItemTaskResult success', ress);
+              batchUpdateTask(batchUpdateTaskObject).then((resss) => {
+                console.log('batchUpdateTask success', resss);
+                callback(resss);
+              });
+            }
+          })
+          .catch((err) => {
+            console.error('uploadItemTaskResult fail', err);
+          });
+      } else {
+        Taro.showToast({
+          title: i18n.failTips,
+          icon: 'error'
+        });
       }
-    ],
-    sort: [
-      {
-        direction: 'desc',
-        field: 'sortNumber'
-      }
-    ],
-    limit: 200,
-    offset: 0
-  };
-  return httpService.post(
-    `/api/data/v1/namespaces/package_copysa30x__c/objects/task_list/records`,
-    { data }
-  );
+    })
+    .catch((err) => {
+      console.error('updateRoomTaskResult fail', err);
+      callback(err);
+      Taro.showToast({
+        title: i18n.failTips,
+        icon: 'error'
+      });
+    });
 };
 
 /**
- * 获取设备任务列表
+ * 更新巡检设备层面记录
+ * @param {*} taskList
+ * @param {*} type
+ * @param {*} roomTaskId
+ * @param {*} userInfo
+ * @param {*} noNeedParams
+ * @param {*} callback
  */
-export const getRoomMriDeviceList = (params) => {
-      var data = JSON.stringify({
-        "page_size": 500,
-        "need_total_count": false,
-        "query_deleted_record": false,
-        "use_page_token": false,
-        "offset": 0,
-        "select": [
-          "_id",
-          "device_name", // 名称
-          "manufacturer", // 品牌
-          "model", // 型号
-          "serial", // 序列号
-          "asset_number", // 资产编号
-          "lookup_item"
-        ],
-        "order_by": [
-          {
-            "field": "_id",
-            "direction": "desc"
-          }
-        ],
-        "filter": {
-          "conditions": [
-            {
-              "left": {
-                "type": "metadataVariable",
-                "settings": "{\"fieldPath\":[{\"fieldApiName\": \"room\",\"objectApiName\": \"object_meetingroom_device_info\"}]}"
-              },
-              "right": {
-                "type": "constant",
-                "settings": JSON.stringify({ "data": { _id: params.roomId } })
-              },
-              "operator": "equals"
-            },
-            {
-              "left": {
-                "type": "metadataVariable",
-                "settings": "{\"fieldPath\":[{\"fieldApiName\": \"status\",\"objectApiName\": \"object_meetingroom_device_info\"}]}"
-              },
-              "right": {
-                "type": "constant",
-                "settings": JSON.stringify({ "data": true })
-              },
-              "operator": "equals"
-            }
-          ],
-          "expression": "1 and 2"
-        },
+export const saveTask = (taskList, type, roomTaskId, userInfo, noNeedParams = null, callback) => {
+  console.log('taskList', taskList);
+  const { userId, userNewId } = userInfo;
+  let batchUpdateObject = {
+    records: []
+  };
+  let roomTaskResult = 'normal';
+  let roomFileIdList = [];
+  for (let index = 0; index < taskList.length; index++) {
+    const t = taskList[index];
+    console.log('t', t);
+    const resultData = {
+      _id: t._id,
+      option_n78g80c: {
+        apiName: t.result
+      },
+      actual_inspector: {
+        _id: parseInt(userNewId)
+      }
+    };
+    if (type === 'roomUse') {
+      resultData['taskPhoto'] = [];
+      roomTaskResult = 'roomuse';
+      resultData['option_n78g80c'] = {
+        apiName: 'roomuse'
+      };
+    } else if (type === 'noNeed') {
+      resultData['taskPhoto'] = [];
+      roomTaskResult = 'notneed';
+      resultData['option_n78g80c'] = {
+        apiName: 'notneed'
+      };
+    } else {
+      resultData.taskPhoto = [];
+      console.log('t.fileIdList', t.fileIdList);
+      // 这里需要将历史的和新增的图片都上传
+      // 历史
+      if (Array.isArray(t.taskPhoto) && t.taskPhoto.length > 0) {
+        for (const photo of t.taskPhoto) {
+          const fileId = photo.fileId;
+          roomFileIdList.push({
+            fileId: fileId
+          });
+          resultData.taskPhoto.push({
+            fileId: fileId
+          });
+        }
+      }
+      // 新增
+      if (Array.isArray(t.fileIdList) && t.fileIdList.length > 0) {
+        for (const fileId of t.fileIdList) {
+          roomFileIdList.push({
+            fileId: fileId
+          });
+          resultData.taskPhoto.push({
+            fileId: fileId
+          });
+        }
+      }
+      if (t['result'] === 'error') {
+        roomTaskResult = 'error';
+        resultData['errorSub'] = t.errorSub;
+        resultData['serviceList'] = t.faultType;
+        resultData['richText_4ynjot5'] = {
+          raw: t.errorDesc ? t.errorDesc : ''
+        };
+        resultData['errorText'] = t.errorDesc ? t.errorDesc : '';
+      } else {
+        resultData['richText_4ynjot5'] = {
+          raw: ''
+        };
+        resultData['errorText'] = '';
+        resultData['serviceList'] = {};
+        resultData['errorSub'] = {};
+      }
+    }
+    batchUpdateObject['records'].push(resultData);
+  }
+  const notNeedText = noNeedParams ? noNeedParams.desc : '';
+  const notNeedPatrol = noNeedParams ? { _id: noNeedParams.id } : null;
+  console.log('batchUpdateObject', batchUpdateObject);
+  batchUpdateTaskHistoryRecords(batchUpdateObject).then((res) => {
+    console.log('batchUpdateTaskHistoryRecords success', res);
+    if (res.data.result.code === '0') {
+      Taro.showToast({
+        title: i18n.updateInspecLoading,
+        duration: 2000,
+        icon: 'loading',
+        success: function () {
+          updateRoomTaskHistory(
+            roomTaskId,
+            roomTaskResult,
+            roomFileIdList,
+            notNeedText,
+            notNeedPatrol
+          ).then((res) => {
+            callback(res);
+          });
+        }
       });
-  return httpService.post(
-    `/v1/data/namespaces/package_copysa30x__c/objects/object_meetingroom_device_info/records_query`,
-    { data }
-  );
+    } else {
+      Taro.showToast({
+        title: i18n.failTips,
+        icon: 'error'
+      });
+    }
+  });
+};
+/**
+ * 获取房间任务列表
+ * @param {*} params
+ * @param {*} dispatch
+ */
+export const getRoomTaskListAction = (params, dispatch, originalRoomList, setLoading) => {
+  const {
+    searchCondition,
+    siteId,
+    offset,
+    selectedPlanIds,
+    selectedFloorIds,
+    selectedRoomTypeIds,
+    limitRoomType
+  } = params;
+  const filter = [
+    {
+      leftValue: 'taskState',
+      operator: 'eq',
+      rightValue: 'undo'
+    }
+  ];
+  // 搜索条件
+  if (searchCondition) {
+    //searchCondition 按空格分割成数组
+    const searchConditionArr = searchCondition.split(' ');
+    // 生成搜索条件
+    let op = { or: [] };
+    searchConditionArr.forEach((item) => {
+      if (item && item !== '') {
+        op.or.push({
+          leftValue: 'inspection_room',
+          operator: 'contain',
+          rightValue: item
+        });
+        op.or.push({
+          leftValue: 'inspection_plan',
+          operator: 'contain',
+          rightValue: item
+        });
+        op.or.push({
+          leftValue: 'inspection_type_cn',
+          operator: 'contain',
+          rightValue: item
+        });
+        op.or.push({
+          leftValue: 'inspection_type_en',
+          operator: 'contain',
+          rightValue: item
+        });
+        op.or.push({
+          leftValue: 'inspection_room_fake_fuzzysearch',
+          operator: 'contain',
+          rightValue: item
+        });
+      }
+    });
+    if (op.or.length > 0) {
+      filter.push(op);
+    }
+  }
+  //   计划筛选
+  if (Array.isArray(selectedPlanIds) && selectedPlanIds.length > 0) {
+    const List = [];
+    for (let planId of selectedPlanIds) {
+      List.push({
+        leftValue: 'planObject._id',
+        operator: 'eq',
+        rightValue: planId
+      });
+    }
+    filter.push({
+      or: List
+    });
+  }
+  //   楼层筛选
+  if (Array.isArray(selectedFloorIds) && selectedFloorIds.length > 0) {
+    var List = [];
+    for (let floor of selectedFloorIds) {
+      List.push({
+        leftValue: 'floor',
+        operator: 'eq',
+        rightValue: floor
+      });
+    }
+    filter.push({
+      or: List
+    });
+  }
+  //   巡检类型筛选
+  if (Array.isArray(selectedRoomTypeIds) && selectedRoomTypeIds.length > 0) {
+    const List = [];
+    for (let type of selectedRoomTypeIds) {
+      List.push({
+        leftValue: 'room_type',
+        operator: 'eq',
+        rightValue: type
+      });
+    }
+    filter.push({
+      or: List
+    });
+  }
+  //巡检组限制
+  if (Array.isArray(limitRoomType) && limitRoomType.length > 0) {
+    let roomTypeFilterList = [];
+    for (const rt of limitRoomType) {
+      roomTypeFilterList.push({
+        leftValue: 'room_type',
+        operator: 'eq',
+        rightValue: rt._id
+      });
+    }
+    filter.push({
+      or: roomTypeFilterList
+    });
+  }
+  getRoomTaskList(siteId, filter, offset).then((res) => {
+    const queryDataList = res.data.records;
+    const roomTaskList = queryDataList.map((item) => {
+      const floorInfo = item.floor;
+      let floorName = floorInfo._name;
+      if (!floorInfo._name.includes('B')) {
+        floorName = floorName + 'F';
+      }
+      // 时区
+      const plan_timezone = item.plan_timezone?.apiName;
+      let planTimeZone = 8;
+      if (plan_timezone?.includes('option_T')) {
+        planTimeZone = plan_timezone.split('_T')[1];
+      } else if (plan_timezone?.includes('option_F')) {
+        planTimeZone = 0 - plan_timezone.split('_F')[1];
+      }
+      return {
+        ...item,
+        floorName: floorName,
+        planTimeZone: parseInt(planTimeZone)
+      };
+    });
+    const roomTaskTotal = res.data.total;
+    originalRoomList.push(...roomTaskList);
+    console.log('originalRoomList', originalRoomList.length);
+    dispatch({
+      type: GETROOMTASKLIST,
+      payload: {
+        roomTaskList: originalRoomList,
+        roomTaskTotal: roomTaskTotal
+      }
+    });
+    setLoading(false);
+  });
+};
+
+export const getTodayDoneRoomTaskListAction = (
+  params,
+  originalList,
+  historyType,
+  userNewId,
+  dispatch,
+  setLoading
+) => {
+  const { siteInfo, offset, selectedPlanIds, selectedFloorIds, selectedResultIds } = params;
+  const siteId = siteInfo._id;
+  // 站点时区
+  // 时区
+  const site_timezone = siteInfo.time_zone?.apiName;
+  let siteTimeZone = 8;
+  if (site_timezone?.includes('option_T')) {
+    siteTimeZone = site_timezone.split('_T')[1];
+  } else if (site_timezone?.includes('option_F')) {
+    siteTimeZone = 0 - site_timezone.split('_F')[1];
+  }
+  const localDate = new Date(new Date().valueOf() + siteTimeZone * 60 * 60 * 1000);
+  const todayTimeStamp = new Date(localDate.toJSON().substring(0, 10)).valueOf();
+  const nowTimeStamp = new Date(localDate.toJSON()).valueOf();
+  const filter = [
+    {
+      leftValue: 'taskState',
+      operator: 'eq',
+      rightValue: 'done'
+    },
+    {
+      leftValue: 'datetime_afsqnsu',
+      operator: 'gte',
+      rightValue: parseInt(todayTimeStamp)
+    },
+    {
+      leftValue: 'datetime_afsqnsu',
+      operator: 'lte',
+      rightValue: parseInt(nowTimeStamp)
+    }
+  ];
+  console.log('historyType', historyType);
+  if (historyType === 'user') {
+    filter.push({
+      leftValue: 'user',
+      operator: 'eq',
+      rightValue: userNewId
+    });
+  }
+  //   楼层筛选
+  if (Array.isArray(selectedFloorIds) && selectedFloorIds.length > 0) {
+    var List = [];
+    for (let floor of selectedFloorIds) {
+      List.push({
+        leftValue: 'floor',
+        operator: 'eq',
+        rightValue: floor
+      });
+    }
+    filter.push({
+      or: List
+    });
+  }
+  //   计划筛选
+  if (Array.isArray(selectedPlanIds) && selectedPlanIds.length > 0) {
+    const List = [];
+    for (let planId of selectedPlanIds) {
+      List.push({
+        leftValue: 'planObject._id',
+        operator: 'eq',
+        rightValue: planId
+      });
+    }
+    filter.push({
+      or: List
+    });
+  }
+  //   巡检类型筛选
+  if (Array.isArray(selectedResultIds) && selectedResultIds.length > 0) {
+    const List = [];
+    for (let result of selectedResultIds) {
+      List.push({
+        leftValue: 'taskResult',
+        operator: 'eq',
+        rightValue: result
+      });
+    }
+    filter.push({
+      or: List
+    });
+  }
+  getRoomTaskList(siteId, filter, offset).then((res) => {
+    const queryDataList = res.data.records;
+    const roomTaskList = queryDataList.map((item) => {
+      const floorInfo = item.floor;
+      let floorName = floorInfo._name;
+      if (!floorInfo._name.includes('B')) {
+        floorName = floorName + 'F';
+      }
+
+      // 时区
+      const plan_timezone = item.plan_timezone?.apiName;
+      let planTimeZone = 8;
+      if (plan_timezone?.includes('option_T')) {
+        planTimeZone = plan_timezone.split('_T')[1];
+      } else if (plan_timezone?.includes('option_F')) {
+        planTimeZone = 0 - plan_timezone.split('_F')[1];
+      }
+      return {
+        ...item,
+        floorName: floorName,
+        planTimeZone: parseInt(planTimeZone)
+      };
+    });
+    const roomTaskTotal = res.data.total;
+    originalList.push(...roomTaskList);
+    console.log('originalList', originalList.length);
+    // callback({
+    //   roomHistoryList: originalList,
+    //   roomHistoryTotal: roomTaskTotal
+    // });
+    dispatch({
+      type: GETROOMTASKHISTORYLIST,
+      payload: {
+        roomHistoryList: originalList,
+        roomHistoryTotal: roomTaskTotal
+      }
+    });
+    setLoading(false);
+  });
+};
+/**
+ * 获取设备任务列表
+ * @param {*} payload
+ * @param {*} dispatch
+ */
+export const getTaskListAction = (payload, dispatch, setLoading) => {
+  getRoomMriDeviceList(payload).then((mriRes) => {
+    console.log('getRoomMriDeviceList===>', mriRes);
+    let mriList = []
+    if(mriRes?.data?.items) {
+      mriList = mriRes?.data?.items.map((item) => {
+        return {
+          ...item,
+          device_type_id: item?.lookup_item?._id || item?.lookup_item?.id
+        }
+      })
+    }
+    getTaskList(payload).then((res) => {
+      const queryDataList = res.data.records.map((item) => {
+        const deviceType = item.deviceType?._id || item.deviceType?.id
+        return {
+          ...item,
+          mriList: mriList.filter((mriItem) => mriItem.device_type_id == deviceType),
+          result: 'normal',
+          errorDesc: '',
+          errorSub: {
+            apiName: 'errorNotReslove'
+          },
+          photoList: []
+        };
+      });
+      // const taskList = queryDataList.sort((a, b) => {
+      //   return a.sortNumber - b.sortNumber;
+      // });
+      let sortList = new Array(queryDataList.length);
+      for (let task of queryDataList) {
+        if (task.sortNumber === null) {
+          sortList = queryDataList;
+        } else {
+          sortList[task['sortNumber']] = task;
+        }
+      }
+      sortList = sortList.filter(Boolean);
+      console.log('getTaskListAction taskList', sortList);
+      let isSubmit = true;
+      for (let i = 0; i < sortList.length; i++) {
+        // 拉取任务列表的时候, 如果计划需要拍照 && 基础设置一定得拍照
+        // 不拍照的话不允许允许提交
+        const item = sortList[i];
+        const { isMustPhoto, isPhoto } = item;
+        if (isMustPhoto.apiName === 'allow' && isPhoto.apiName === 'need') {
+          isSubmit = false;
+          break;
+        }
+      }
+      dispatch({
+        type: GETTASKLIST,
+        payload: {
+          taskList: sortList
+        }
+      });
+      dispatch({
+        type: UPDATETASKLISTISSUBMITSTATUS,
+        payload: {
+          isSubmit: isSubmit
+        }
+      });
+      setLoading(false);
+    });
+  })
+
 };
 
 /**
  * @deprecated
- * 获取占用房间设备任务列表
+ * @param params
+ * @param setTaskList
+ * @param setLoading
  */
-export const getOccupiedRoomTaskList = (params) => {
-  const data = {
-    fields: [
-      '_id',
-      'is_error_desc_info',
-      'contentDesc',
-      'delete_status',
-      'isShowNothaveitem',
-      'referenceField_ghe7oxh',
-      'taskState',
-      'isPhoto',
-      'room_type',
-      'item_id',
-      'isMustPhoto',
-      'isUseAlbum',
-      'isShowErrorNotResolve',
-      'isShowErrorResolve',
-      'isShowErrorType',
-      'site_id',
-      'roomInfo',
-      'plan_list_id',
-      'deviceType',
-      'referenceField_hf4dmgc',
-      'referenceField_ghe7oxh',
-      'referenceField_khku11h',
-      'referenceField_cxyom0w',
-      'region',
-      'item_type',
-      'sortNumber',
-      'referenceField_jfjimls',
-      'option_1xe2tou',
-      'text_l4qsi3k',
-      'contentName',
-      'referenceField_pw4kfh1'
-    ],
-    filter: [
-      {
-        and: [
-          {
-            leftValue: 'plan_list_id',
-            operator: 'eq',
-            rightValue: params.planId
-          },
-          {
-            leftValue: 'plan_list_id.option_iqefg30', // 进行中任务
-            operator: 'eq',
-            rightValue: 'option_yy6r7c0'
-          },
-          {
-            leftValue: 'site_id._id',
-            operator: 'eq',
-            rightValue: params.siteId
-          },
-          {
-            leftValue: 'item_id.lookup_0py8fla._id',
-            operator: 'eq',
-            rightValue: `${params.floorId}`
-          },
-          {
-            leftValue: 'item_id.lookup_at96fh8._id',
-            operator: 'eq',
-            rightValue: `${params.roomId}`
-          },
-          {
-            leftValue: 'item_id.option_j8wwovx', //设备启用
-            operator: 'eq',
-            rightValue: 'option_iuacks9'
-          },
-          {
-            or: [
-              {
-                leftValue: 'delete_status', //任务未被删除
-                operator: 'eq',
-                rightValue: 'option_using'
-              },
-              {
-                leftValue: 'delete_status', //任务未被删除
-                operator: 'eq',
-                rightValue: null
-              }
-            ]
-          }
-        ]
+export const setOccupiedRoomTaskDetail = (params, setTaskList, setLoading) => {
+  getOccupiedRoomTaskList(params).then((res) => {
+    const queryDataList = res.data.records.map((item) => {
+      return {
+        ...item,
+        result: 'normal',
+        errorDesc: '',
+        errorSub: {
+          apiName: 'errorNotReslove'
+        },
+        photoList: []
+      };
+    });
+    let sortList = new Array(queryDataList.length);
+    for (let task of queryDataList) {
+      if (task.sortNumber === null) {
+        sortList = queryDataList;
+      } else {
+        sortList[task['sortNumber']] = task;
       }
-    ],
-    sort: [
-      {
-        direction: 'desc',
-        field: 'sortNumber'
-      }
-    ],
-    limit: 200,
-    offset: 0
-  };
-  return httpService.post(
-    `/api/data/v1/namespaces/package_copysa30x__c/objects/task_list/records`,
-    { data }
-  );
+    }
+    sortList = sortList.filter(Boolean);
+    console.log('setOccupiedRoomTaskDetail taskList', sortList);
+    setTaskList(sortList);
+    setLoading(false);
+  }).catch((err) => {
+    console.error('setOccupiedRoomTaskDetail taskList', err);
+    setTaskList([]);
+    setLoading(false);
+  });
 };
 
 /**
  * 获取巡检记录列表
- * @param {String} roomTaskId
- * @returns
+ * @param {*} params
+ * @param {*} dispatch
+ * @param {*} setLoading
+ * @param setLocalImgFileName2APaaSFileId
  */
-export const getHistoryTaskList = (roomTaskId) => {
-  const data = {
-    fields: [
-      '_id',
-      'isShowNothaveitem',
-      '_createdAt',
-      'item_id',
-      'roomresult',
-      'isPhoto',
-      'isMustPhoto',
-      'isUseAlbum',
-      'isShowErrorResolve',
-      'item_type',
-      'taskPhoto',
-      'option_n78g80c',
-      'referenceField_dfmgbl4',
-      'errorSub',
-      'serviceList',
-      'referenceField_dc259wd',
-      'richText_4ynjot5',
-      'referenceField_dc259wd',
-      'isShowErrorType'
-    ], //option_n78g80c为巡检结果 referenceField_dfmgbl4巡检类型 referenceField_dc259wd设施类型 richText_4ynjot5巡检异常描述(富文本) referenceField_dc259wd 设施类型
-    filter: [
-      {
-        and: [
-          {
-            leftValue: 'roomresult._id', // 进行中任务
-            operator: 'eq',
-            rightValue: roomTaskId
-          }
-        ]
-      }
-    ],
-    limit: 20,
-    offset: 0
-  };
-  return httpService.post(
-    `/api/data/v1/namespaces/package_copysa30x__c/objects/record_list/records`,
-    { data }
-  );
-};
-/**
- * 获取故障类型
- * @param {*} deviceType
- * @returns
- */
-export const getFaultTypeList = (deviceType) => {
-  const data = {
-    fields: [
-      '_id',
-      'errorType',
-      'errorDetails',
-      'multilingual_1wfba75',
-      'errorDecribeMulti',
-      'display'
-    ],
-    filter: [
-      {
-        and: [
-          {
-            leftValue: 'deviceType',
-            operator: 'eq',
-            rightValue: deviceType
-          }
-        ]
-      }
-    ],
-    sort: [
-      {
-        direction: 'desc',
-        field: '_createdAt'
-      }
-    ],
-    limit: 50,
-    offset: 0
-  };
-  return httpService.post(
-    `/api/data/v1/namespaces/package_copysa30x__c/objects/object_0hvul78/records`,
-    { data }
-  );
-};
-/**
- * 上传文件
- * @param {*} filePath
- */
-export const uploadTaskFile = async (filePath) => {
-  console.log(filePath);
-  console.log(filePath.split('/')[3]);
-  return Taro.uploadFile({
-    url: `${apiConfig.baseUrl}/api/attachment/v1/files`, //仅为示例，非真实的接口地址
-    filePath: filePath,
-    name: 'file',
-    header: {
-      Authorization: Taro.getStorageSync('TOKEN')
+export const getHistoryTaskListAction = async (params, dispatch, setLoading, setLocalImgFileName2APaaSFileId) => {
+  const { roomTaskId } = params;
+  const res = await getHistoryTaskList(roomTaskId);
+  console.log('getHistoryTaskListAction response', res);
+  const mapping = {};
+  const manager = Taro.getFileSystemManager(); // 获取全局唯一的文件管理器
+  let taskHistoryList = [];
+  const promiseList = [];
+  const fileIdList = [];
+  for (let i = 0; i < res.data.records.length; i++) {
+    const item = res.data.records[i];
+    let photoList = [];
+    let result = '';
+    switch (item['option_n78g80c']?.apiName) {
+      case 'normal':
+        result = 'normal';
+        break;
+      case 'error':
+        result = 'error';
+        break;
+      case 'nothave':
+        result = 'nothave';
+        break;
+      default:
+        break;
     }
-  });
-};
-
-/**
- * 获取无需巡检项列表
- * @param {String} roomType
- * @returns
- */
-export const getNoNeedPatrolList = (roomType) => {
-  const data = {
-    // _id 、 无需巡检名称 、 是否展示无需巡检描述 、 备注是否必填
-    fields: ['_id', 'noNeedPatrolName', 'showNoNeedPatrolComment', 'isCommentRequired'],
-    filter: [
-      {
-        and: [
-          {
-            leftValue: 'roomTypeObject',
-            operator: 'eq',
-            rightValue: roomType
-          }
-        ]
+    // console.log('getHistoryTaskListAction', item);
+    if (Array.isArray(item.taskPhoto) && item.taskPhoto.length > 0) {
+      for (let i of item.taskPhoto) {
+        const fileId = i.fileId;
+        photoList.push(fileId);
+        fileIdList.push(fileId);
+        promiseList.push(getFileInfo(fileId));
       }
-    ]
-  };
-  return httpService.post(
-    `/api/data/v1/namespaces/package_copysa30x__c/objects/object_8c7g90v/records`,
-    { data }
-  );
-};
-
-// export const getFileInfo = (fileId) => {
-//   const data = {};
-//   return httpService.get(
-//     `/api/attachment/v1/files/${String(fileId)}`,
-//     { data }
-//   );
-// };
-
-export const getFileInfo = (fileId) => {
-  return Taro.request({
-    url: `https://ae-openapi.feishu.cn/api/attachment/v1/files/${String(fileId)}`,
-    method: 'GET',
-    responseType: 'arraybuffer',
-    header: {
-      Authorization: Taro.getStorageSync('TOKEN')
     }
-  });
-};
-/**
- * 获取房间对象信息
- */
-export const getRoomObjectByOmmId = (ommId, siteId) => {
-  let newOmmId = '-1';
-  if (ommId) {
-    newOmmId = ommId;
+    taskHistoryList.push({
+      ...item,
+      result: result,
+      photoList: photoList,
+      faultType: item.serviceList,
+      errorDesc: item.richText_4ynjot5?.raw,
+      deviceType: item.item_type
+    }
+    );
   }
-  const data = {
-    fields: ['_id'],
-    filter: [
-      {
-        and: [
-          {
-            leftValue: 'roomid',
-            operator: 'eq',
-            rightValue: newOmmId
-          },
-          {
-            leftValue: 'lookup_kv79yvp',
-            operator: 'eq',
-            rightValue: siteId
-          }
-        ]
-      }
-    ]
-  };
 
-  return httpService.post(
-    `/api/data/v1/namespaces/package_copysa30x__c/objects/object_jslamqj/records`,
-    { data }
-  );
+  if (promiseList.length > 0) {
+    const promiseResults = [];
+    const chunks = chunkArray(promiseList, 10);
+    for (let i = 0; i < chunks.length; i++) {
+      const item = chunks[i];
+      const result = await Promise.all(item);
+      promiseResults.push(...result);
+    }
+    for (let j = 0; j < promiseResults.length; j++) {
+      const fileInfoRes = await promiseResults[j];
+      if (fileInfoRes.statusCode === 200) {
+        console.log('getFileInfo', fileInfoRes);
+        console.log(fileInfoRes.data);
+        const fileId = fileIdList[j];
+        console.log('fileId', fileId);
+        const filePrefix = String(Math.random().toString(16).substring(2));
+        Object.assign(mapping, { [filePrefix]: fileId });
+        console.log('filePrefix', filePrefix);
+        manager.writeFile({
+          filePath: 'ttfile://user/' + filePrefix + '.png',
+          data: fileInfoRes.data,
+          encoding: 'base64',
+          success(callback) {
+            console.log('writeFile success', callback);
+            for (let i = 0; i < taskHistoryList.length; i++) {
+              const task = taskHistoryList[i];
+              const { photoList } = task;
+              const index = photoList.findIndex(tempId => typeof tempId === 'string' && tempId === fileId);
+              if (index !== -1) {
+                taskHistoryList[i].photoList[index] = {
+                  status: 'success',
+                  url: `ttfile://user/${filePrefix}.png`,
+                  path: `ttfile://user/${filePrefix}.png`
+                };
+                break;
+              }
+            }
+          },
+          fail(callback) {
+            console.log('writeFile fail', callback);
+          }
+        });
+      }
+    }
+  }
+
+  console.log('mapping', mapping);
+  setLocalImgFileName2APaaSFileId(mapping);
+  dispatch({
+    type: GETTASKHISTORYLIST,
+    payload: {
+      taskHistoryList: taskHistoryList
+    }
+  });
+  setLoading(false);
+  // await Taro.showLoading({ title: i18n.loadingPhoto });
+};
+
+const chunkArray = (array, chunkSize) => {
+  const chunks = [];
+  for (let i = 0; i < array.length; i += chunkSize) {
+    chunks.push(array.slice(i, i + chunkSize));
+  }
+  return chunks;
 };
 
 /**
- * 获取当前站点的巡检量
- * @param {String} siteId //站点ID
- * @param {Number} site_timezone //时区
- * @returns
+ * 修改设备任务列表数据
+ * @param {*} taskList
+ * @param {*} dispatch
  */
-export const getInspectionVolumCurrentSite = (siteId, site_timezone) => {
-  const data = {
-    params: {
-      site_id: siteId,
-      site_timezone: site_timezone
+export const setTaskListAction = (taskList, dispatch) => {
+  let i = 0;
+  console.log('setTaskListAction', taskList);
+  for (let index = 0; index < taskList.length; index++) {
+    const task = taskList[index];
+    if (task.isPhoto?.apiName === 'need' && task.isMustPhoto?.apiName === 'allow') {
+      if (task.result !== 'nothave' && task.photoList.length === 0) {
+        i += 1;
+      }
     }
-  };
+    if (task.result === '') {
+      i += 1;
+    } else if (task.result === 'error') {
+      if (
+        task.isPhoto?.apiName === 'need' &&
+        task.isMustPhoto?.apiName === 'allow' &&
+        task.photoList.length === 0
+      ) {
+        i += 1;
+      }
+      // 故障类型
+      if (task.isShowErrorType?.apiName === 'show' && task.faultType === undefined) {
+        i += 1;
+      }
+      if (task.is_error_desc_info && !task.errorDesc) {
+        i += 1;
+      }
+    }
+  }
+  console.log('setTaskListAction', i);
 
-  return httpService.post(
-    `/api/cloudfunction/v1/namespaces/package_copysa30x__c/invoke/inspection_volum_statistics_current_site`,
-    { data }
-  );
+  dispatch({
+    type: UPDATETASKLISTISSUBMITSTATUS,
+    payload: {
+      isSubmit: i === 0
+    }
+  });
+  dispatch({
+    type: GETTASKLIST,
+    payload: {
+      taskList: taskList
+    }
+  });
+};
+
+/**
+ * 修改设备任务列表历史数据
+ * @param {Array} taskHistoryList
+ * @param {*} dispatch
+ */
+export const setTaskHistoryListAction = (taskHistoryList, dispatch) => {
+  console.log('setTaskHistoryListAction', taskHistoryList);
+  let i = 0;
+  for (let index = 0; index < taskHistoryList.length; index++) {
+    const task = taskHistoryList[index];
+    console.log('task', task);
+    let taskPhotoLength = 0;
+    let fileIdListLength = 0;
+    let picTotal = 0;
+    if (task?.taskPhoto && Array.isArray(task.taskPhoto)) {
+      taskPhotoLength = task.taskPhoto.length;
+    }
+    if (task?.fileIdList && Array.isArray(task.fileIdList)) {
+      fileIdListLength = task.fileIdList.length;
+    }
+    picTotal = taskPhotoLength + fileIdListLength;
+    // console.log('taskPhotoLength', taskPhotoLength);
+    // console.log('fileIdListLength', fileIdListLength);
+    // console.log('picTotal', picTotal);
+    if (task.isPhoto?.apiName === 'need' && task.isMustPhoto?.apiName === 'allow') {
+      if (task.result !== 'nothave' && picTotal === 0) {
+        i += 1;
+      }
+    }
+    if (task.result === '') {
+      i += 1;
+    } else if (task.result === 'error') {
+      if (
+        task.isPhoto?.apiName === 'need' &&
+        task.isMustPhoto?.apiName === 'allow' &&
+        picTotal === 0
+      ) {
+        i += 1;
+      }
+      // 故障类型
+      if (task.isShowErrorType?.apiName === 'show' && task.faultType === undefined) {
+        i += 1;
+      }
+      if (task.is_error_desc_info && !task.errorDesc) {
+        i += 1;
+      }
+    }
+  }
+  console.log('setTaskListAction', i);
+
+  dispatch({
+    type: UPDATETASKLISTISSUBMITSTATUS,
+    payload: {
+      isSubmit: i === 0
+    }
+  });
+  dispatch({
+    type: GETTASKLIST,
+    payload: {
+      taskList: taskHistoryList
+    }
+  });
+};
+
+/**
+ * 获取故障类型列表
+ * @param {*} deviceType
+ * @param {*} dispatch
+ */
+export const getFaultTypeListAction = (deviceType, dispatch) => {
+  getFaultTypeList(deviceType).then((res) => {
+    const faultTypeList = res.data.records;
+    dispatch({
+      type: SETFAUTYPELTLIST,
+      payload: {
+        faultTypeList: faultTypeList
+      }
+    });
+  });
 };
