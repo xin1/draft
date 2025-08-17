@@ -1,6 +1,6 @@
 {item.mriList.length > 0 && (
-  <View style={{ backgroundColor: '#fff', width: '100%', display: 'flex', flexDirection: 'column' }}>
-    {/* 第一行：表头 */}
+  <View style={{ backgroundColor: '#fff', width: '100%' }}>
+    {/* 表头 */}
     <View style={{ flexDirection: 'row', borderBottom: '1px solid #f0f0f0', height: 30 }}>
       <View style={{ width: '32%', justifyContent: 'center', paddingLeft: 3 }}>
         <Text style={{ fontSize: 11, textAlign: 'center' }}>设备名称</Text>
