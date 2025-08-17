@@ -1,210 +1,715 @@
-// 通过 NPM dependencies 成功安装 NPM 包后此处可引入使用
-// 如安装 linq 包后就可以引入并使用这个包
-// const linq = require("linq");
-const { getMriToken, searchEntities } = require('../mri/api');
+import httpService from '../utils/services/httpService';
+import Taro from '@tarojs/taro';
+import apiConfig from '../utils/services/apiConfig';
+
 /**
- * @param {Params}  params     自定义参数
- * @param {Context} context    上下文参数，可通过此参数下钻获取上下文变量信息等
- * @param {Logger}  logger     日志记录器
- *
- * @return 函数的返回数据
+ * 获取房间任务列表
+ * @param {String} siteId
+ * @param {Array} filter
+ * @param {Number} offset
+ * @returns
  */
-module.exports = async function (params, context, logger) {
-  // 日志功能
-  // logger.info(`${new Date()} 函数开始执行`);
-  const token = await getMriToken(context)
-  console.log('token===>', token);
-  // const room_id = 'omm_3772de712fbda39379df7a6b28ebfa15'
+export const getRoomTaskList = (siteId, filter, offset = 0) => {
+  const queryList = [
+    {
+      leftValue: '_isDeleted',
+      operator: 'eq',
+      rightValue: false
+    },
+    {
+      leftValue: 'site_id._id',
+      operator: 'eq',
+      rightValue: siteId
+    },
+    {
+      leftValue: 'cycle_time', //计划未被删除
+      operator: 'neq',
+      rightValue: null
+    },
+    {
+      leftValue: 'sla_continues_inspect', //继续巡检
+      operator: 'eq',
+      rightValue: true
+    }
+  ];
+  queryList.push(...filter);
+
   const data = {
-    entity_type: 1,
-    // property_keys: ['device_name', 'asset_number', 'manufacturer', 'model', 'serial'],
-    "sort_by": [
+    fields: [
+      '_id',
+      'site_id',
+      'floor',
+      'room_type',
+      'room',
+      'startDate',
+      'endDate',
+      'floornumber',
+      'option_emeakit',
+      'referenceField_y8sqynx',
+      'number_days_remaining_executable',
+      'referenceField_showusing',
+      'planObject',
+      'plan_timezone',
+      'cycle_time',
+      'taskResult',
+      'user',
+      'inspection_room',
+      'plan_end_date'
+    ],
+    filter: [
       {
-        "field": "serial.keyword",
-        "descending": true
+        and: queryList
       }
-    ]
-  }
-  const roomMap = {}
-  await context.db.object("object_jslamqj").select('_id', 'roomid', 'lookup_kv79yvp', 'lookup_n90axhc', 'lookup_m834etw', 'region', 'city').where({
-    state: 'use',
-    roomid: kunlun.operator.notEmpty()
-  }).findStream((records) => {
-    records.forEach(record => {
-      roomMap[record.roomid] = record
-    })
-  })
-  const itemMapping = []
-  const deviceItemMapping = {}
-  const nameMapping = {}
-  await context.db.object("object_mri_device_mapping_item").select('name_cn', 'name_en', 'lookup_items').findStream((records) => {
-    records.forEach(record => {
-      if (record.lookup_items && Array.isArray(record.lookup_items) && record.lookup_items.length > 0) {
-        deviceItemMapping[record.name_cn] = record.lookup_items.map(it => it._id || it.id)
-        deviceItemMapping[record.name_en] = record.lookup_items.map(it => it._id || it.id)
-        nameMapping[record.name_cn] = record.name.en
-        nameMapping[record.name_en] = record.name.cn    
-
+    ],
+    sort: [
+      {
+        field: 'option_emeakit',
+        direction: 'desc'
+      },
+      {
+        field: 'floornumber',
+        direction: 'asc'
+      },
+      // {
+      //   field: 'meetingNumber',
+      //   direction: 'asc'
+      // },
+      {
+        field: 'inspection_room',
+        direction: 'asc'
       }
-    })
-  })
-  logger.info('deviceItemMapping===>', deviceItemMapping)
-  await context.db.object("facility_type").select('_id', 'room_type_id').findStream((records) => {
-    records.forEach(record => {
-      itemMapping.push({
-        room_type_id: record.room_type_id,
-        item_id: record._id
-      })
-    })
-  })
-  logger.info('itemMapping===>', itemMapping)
+    ],
+    limit: parseInt(process.env.TARO_APP_LIMIT),
+    offset: offset
+  };
+  return httpService.post(
+    `/api/data/v1/namespaces/package_copysa30x__c/objects/object_ihdrccm/records`,
+    { data }
+  );
+};
 
-  logger.info('roomMap===>', roomMap)
-  const deviceMap = {}
-  await context.db.object("object_meetingroom_device_info").select('_id', 'mri_id').findStream((records) => {
-    records.forEach(record => {
-      deviceMap[record.mri_id] = record
-    })
-  })
-  let haveMore = true
-  let page = 0
-  const page_size = 500
-  const totalInfo = await searchEntities(token, context, logger, data, page_size, page, true)
-  const total = totalInfo.data?.pagination?.total
-  logger.info('total===>', total)
-  while (haveMore) {
-    const deviceList = []
+/**
+ * 创建巡检设备层面记录
+ * @param {Object} batchCreateObject //
+ * @param {String} planId //
+ * @param {String} overDate //
+ */
+export const uploadItemTaskResult = (batchCreateObject, planId, overDate) => {
+  const data = {
+    params: {
+      token: Taro.getStorageSync('TOKEN'),
+      url: 'https://ae-openapi.feishu.cn/api/data/v1/namespaces/package_copysa30x__c/objects/record_list/batchCreate',
+      patchdata: batchCreateObject,
+      planid: planId,
+      overdate: overDate
+    }
+  };
+  return httpService.post(
+    `/api/cloudfunction/v1/namespaces/package_copysa30x__c/invoke/uploadItemTaskResult`,
+    { data }
+  );
+};
+/**
+ * 批量更新任务列表
+ * @param {Object} batchUpdateTaskObject
+ * @returns
+ */
+export const batchUpdateTask = (batchUpdateTaskObject) => {
+  const data = {
+    params: {
+      token: Taro.getStorageSync('TOKEN'),
+      url: 'https://ae-openapi.feishu.cn/api/data/v1/namespaces/package_copysa30x__c/objects/task_list/batchUpdate',
+      patchdata: batchUpdateTaskObject
+    }
+  };
+  return httpService.post(
+    `/api/cloudfunction/v1/namespaces/package_copysa30x__c/invoke/patchupdate`,
+    { data }
+  );
+};
+/**
+ * 批量更新设备任务历史记录
+ * @param {Object} batchUpdateTaskObject
+ * @returns
+ */
+export const batchUpdateTaskHistoryRecords = (batchUpdateTaskObject) => {
+  const data = {
+    params: {
+      token: Taro.getStorageSync('TOKEN'),
+      url: 'https://ae-openapi.feishu.cn/api/data/v1/namespaces/package_copysa30x__c/objects/record_list/batchUpdate',
+      patchdata: batchUpdateTaskObject
+    }
+  };
+  return httpService.post(
+    `/api/cloudfunction/v1/namespaces/package_copysa30x__c/invoke/patchupdate`,
+    { data }
+  );
+};
 
-    try {
-      const result = await kunlun.tool.retry(
-        async () => {
-          return await searchEntities(token, context, logger, data, page_size, page, false)
+/**
+ * 更新房间巡检结果
+ * @param {*} roomTaskId
+ * @param {*} roomTaskResult
+ * @param {*} roomFileIdList
+ * @param {*} userId
+ * @param {*} notNeedText
+ * @param {*} notNeedPatrol
+ * @returns
+ */
+export const updateRoomTaskResult = (
+  roomTaskId,
+  roomTaskResult,
+  roomFileIdList,
+  userNewId,
+  notNeedText,
+  notNeedPatrol
+) => {
+  const data = {
+    params: {
+      token: Taro.getStorageSync('TOKEN'),
+      url:
+        'https://ae-openapi.feishu.cn/api/data/v1/namespaces/package_copysa30x__c/objects/object_ihdrccm/' +
+        roomTaskId,
+      patchdata: {
+        taskResult: {
+          apiName: roomTaskResult
         },
-        {
-          retryCount: 3,
-          retryDelay: 1000
-        }
-      );
-      logger.info('page===>', page);
-      logger.info('page_size===>', page_size);
-      page += 1
-
-      // const pagination = result.data.pagination
-      // const total = pagination.total
-      if (page * page_size >= total) {
-        haveMore = false
-      }
-      if (!result.data) {
-        logger.info('数据获取失败===>', page)
-        continue
-      }
-      const entities = result.data.entities
-
-      // haveMore = false
-      entities.forEach(element => {
-        if (element?.location_data?.meeting_room_lark_id) {
-          deviceList.push(element)
-        }
-      })
-      logger.info('deviceList===>', deviceList.length)
-
-      const updateList = [];
-      const createList = [];
-      for (let i = 0; i < deviceList.length; i++) {
-        const device = deviceList[i]
-        const deviceInfo = deviceMap[device.id]
-        const roomInfo = roomMap[device.location_data.meeting_room_lark_id]
-        if (!roomInfo) {
-          continue
-        }
-        const property_list = device.property_list
-        const device_name = property_list?.find(item => item.property_key === 'device_name')?.value;
-        const asset_number = property_list?.find(item => item.property_key === 'asset_number')?.value;
-        const manufacturer = property_list?.find(item => item.property_key === 'manufacturer')?.value;
-        const model = property_list?.find(item => item.property_key === 'model')?.value;
-        const serial = property_list?.find(item => item.property_key === 'serial')?.value;
-        const mri_id = device.id
-        const roomtype = roomInfo.lookup_m834etw?._id || roomInfo.lookup_m834etw?.id
-        const deviceMapping = deviceItemMapping[device_name]
-        let lookup_item
-        if (deviceMapping && roomtype) {
-          lookup_item = itemMapping.find(it => it.room_type_id == roomtype && deviceMapping.includes(it.item_id))
-        }
-        // const lookup_item = itemMapping.find(it => it.room_type_id == roomtype && deviceMapping.includes(it.item_id))
-        const item = {
-          asset_number: asset_number,
-          device_name: device_name,
-          manufacturer: manufacturer,
-          model: model,
-          serial: serial,
-          mri_id: JSON.stringify(mri_id),
-          business_region: roomInfo.region ? {
-            _id: roomInfo.region?._id || roomInfo.region?.id
-          } : null,
-          city: roomInfo.city ? {
-            _id: roomInfo.city?._id || roomInfo.city?.id
-          } : null,
-          site: roomInfo.lookup_kv79yvp ? {
-            _id: roomInfo.lookup_kv79yvp?._id || roomInfo.lookup_kv79yvp?.id
-          } : null,
-          floor: roomInfo.lookup_n90axhc ? {
-            _id: roomInfo.lookup_n90axhc?._id || roomInfo.lookup_n90axhc?.id
-          } : null,
-          room: roomInfo._id ? {
-            _id: roomInfo._id
-          } : null,
-          source: 'mri',
-          status: device.asset_status == 1 ? true : false,
-          room_type: roomInfo.lookup_m834etw ? {
-            _id: roomtype
-          } : null,
-          lookup_item: lookup_item ? {
-            _id: lookup_item.item_id
-          } : null,
-        }
-        if (deviceInfo) {
-          updateList.push({
-            _id: deviceInfo._id,
-            ...item
-          })
-        } else {
-          createList.push(item)
-        }
-      }
-      logger.info('updateList===>', updateList)
-      logger.info('updateList===>', updateList.length)
-      logger.info('createList===>', createList)
-      logger.info('createList===>', createList.length)
-      const batchSize = 200;
-
-      try {
-        if (updateList.length > 0) {
-          // 将更新列表按200条一批分割处理
-          for (let i = 0; i < updateList.length; i += batchSize) {
-            const batch = updateList.slice(i, i + batchSize);
-            await context.db.object("object_meetingroom_device_info").batchUpdate(batch);
-          }
-        }
-        if (createList.length > 0) {
-          // 将创建列表按200条一批分割处理
-          for (let i = 0; i < createList.length; i += batchSize) {
-            const batch = createList.slice(i, i + batchSize);
-            await context.db.object("object_meetingroom_device_info").batchCreate(batch);
-          }
-        }
-      } catch (error) {
-        logger.error('MRI设备信息同步失败===>', error)
-      }
-    } catch (error) {
-      logger.error('error===>', error)
-      page += 1
-      if (page * page_size >= total) {
-        haveMore = false
+        taskState: {
+          apiName: 'done'
+        },
+        user: {
+          _id: parseInt(userNewId)
+        },
+        taskPhoto: roomFileIdList,
+        notneedText: notNeedText,
+        datetime_afsqnsu: parseInt(new Date().getTime()),
+        timeZoneInformation:
+          0 - parseInt(new Date().getTimezoneOffset()) / 60 > 0
+            ? `UTC+${0 - parseInt(new Date().getTimezoneOffset()) / 60}`
+            : `UTC${0 - parseInt(new Date().getTimezoneOffset()) / 60}`,
+        notNeedPatrol: notNeedPatrol
       }
     }
-    // 休眠2s
-    await new Promise(resolve => setTimeout(resolve, 2000));
-  }
+  };
+  return httpService.post(
+    `/api/cloudfunction/v1/namespaces/package_copysa30x__c/invoke/patchupdate`,
+    { data }
+  );
+};
 
-  // 在这里补充业务代码
-}
+/**
+ * 更新房间巡检历史
+ * @param {*} roomTaskId
+ * @param {*} roomTaskResult
+ * @param {*} roomFileIdList
+ * @param {*} notNeedText
+ * @param {*} notNeedPatrol
+ * @returns
+ */
+export const updateRoomTaskHistory = (
+  roomTaskId,
+  roomTaskResult,
+  roomFileIdList,
+  notNeedText,
+  notNeedPatrol
+) => {
+  const data = {
+    params: {
+      token: Taro.getStorageSync('TOKEN'),
+      url:
+        'https://ae-openapi.feishu.cn/api/data/v1/namespaces/package_copysa30x__c/objects/object_ihdrccm/' +
+        roomTaskId,
+      patchdata: {
+        taskResult: {
+          apiName: roomTaskResult
+        },
+        notneedText: notNeedText,
+        taskPhoto: roomFileIdList,
+        notNeedPatrol: notNeedPatrol
+      }
+    }
+  };
+  return httpService.post(
+    `/api/cloudfunction/v1/namespaces/package_copysa30x__c/invoke/patchupdate`,
+    { data }
+  );
+};
+
+/**
+ * 获取设备任务列表
+ */
+export const getTaskList = (params) => {
+  let isOccupied = params?.isOccupied;
+  const and = [
+    {
+      leftValue: 'plan_list_id',
+      operator: 'eq',
+      rightValue: params.planId
+    },
+    {
+      leftValue: 'site_id._id',
+      operator: 'eq',
+      rightValue: params.siteId
+    },
+    {
+      leftValue: 'item_id.lookup_0py8fla._id',
+      operator: 'eq',
+      rightValue: `${params.floorId}`
+    },
+    {
+      leftValue: 'item_id.lookup_at96fh8._id',
+      operator: 'eq',
+      rightValue: `${params.roomId}`
+    },
+    {
+      leftValue: 'item_id.option_j8wwovx', //设备启用
+      operator: 'eq',
+      rightValue: 'option_iuacks9'
+    },
+    {
+      or: [
+        {
+          leftValue: 'delete_status', //任务未被删除
+          operator: 'eq',
+          rightValue: 'option_using'
+        },
+        {
+          leftValue: 'delete_status', //任务未被删除
+          operator: 'eq',
+          rightValue: null
+        }
+      ]
+    }
+  ];
+  // 普通任务才加上这俩限制条件, 补巡检不用加
+  if (!isOccupied) {
+    and.push({
+      leftValue: 'plan_list_id.option_iqefg30', // 进行中任务
+      operator: 'eq',
+      rightValue: 'option_yy6r7c0'
+    });
+    and.push({
+      leftValue: 'complete_status', // 未完成的任务
+      operator: 'eq',
+      rightValue: 'undone'
+    });
+  }
+  const data = {
+    fields: [
+      '_id',
+      'is_error_desc_info',
+      'contentDesc',
+      'delete_status',
+      'isShowNothaveitem',
+      'referenceField_ghe7oxh',
+      'taskState',
+      'isPhoto',
+      'room_type',
+      'item_id',
+      'isMustPhoto',
+      'isUseAlbum',
+      'isShowErrorNotResolve',
+      'isShowErrorResolve',
+      'isShowErrorType',
+      'site_id',
+      'roomInfo',
+      'plan_list_id',
+      'deviceType',
+      'referenceField_hf4dmgc',
+      'referenceField_ghe7oxh',
+      'referenceField_khku11h',
+      'referenceField_cxyom0w',
+      'region',
+      'item_type',
+      'sortNumber',
+      'referenceField_jfjimls',
+      'option_1xe2tou',
+      'text_l4qsi3k',
+      'contentName',
+      'referenceField_pw4kfh1'
+    ],
+    filter: [
+      {
+        and: and
+      }
+    ],
+    sort: [
+      {
+        direction: 'desc',
+        field: 'sortNumber'
+      }
+    ],
+    limit: 200,
+    offset: 0
+  };
+  return httpService.post(
+    `/api/data/v1/namespaces/package_copysa30x__c/objects/task_list/records`,
+    { data }
+  );
+};
+
+/**
+ * 获取设备任务列表
+ */
+export const getRoomMriDeviceList = (params) => {
+      var data = JSON.stringify({
+        "page_size": 500,
+        "need_total_count": false,
+        "query_deleted_record": false,
+        "use_page_token": false,
+        "offset": 0,
+        "select": [
+          "_id",
+          "device_name", // 名称
+          "manufacturer", // 品牌
+          "model", // 型号
+          "serial", // 序列号
+          "asset_number", // 资产编号
+          "lookup_item"
+        ],
+        "order_by": [
+          {
+            "field": "_id",
+            "direction": "desc"
+          }
+        ],
+        "filter": {
+          "conditions": [
+            {
+              "left": {
+                "type": "metadataVariable",
+                "settings": "{\"fieldPath\":[{\"fieldApiName\": \"room\",\"objectApiName\": \"object_meetingroom_device_info\"}]}"
+              },
+              "right": {
+                "type": "constant",
+                "settings": JSON.stringify({ "data": { _id: params.roomId } })
+              },
+              "operator": "equals"
+            },
+            {
+              "left": {
+                "type": "metadataVariable",
+                "settings": "{\"fieldPath\":[{\"fieldApiName\": \"status\",\"objectApiName\": \"object_meetingroom_device_info\"}]}"
+              },
+              "right": {
+                "type": "constant",
+                "settings": JSON.stringify({ "data": true })
+              },
+              "operator": "equals"
+            }
+          ],
+          "expression": "1 and 2"
+        },
+      });
+  return httpService.post(
+    `/v1/data/namespaces/package_copysa30x__c/objects/object_meetingroom_device_info/records_query`,
+    { data }
+  );
+};
+
+/**
+ * @deprecated
+ * 获取占用房间设备任务列表
+ */
+export const getOccupiedRoomTaskList = (params) => {
+  const data = {
+    fields: [
+      '_id',
+      'is_error_desc_info',
+      'contentDesc',
+      'delete_status',
+      'isShowNothaveitem',
+      'referenceField_ghe7oxh',
+      'taskState',
+      'isPhoto',
+      'room_type',
+      'item_id',
+      'isMustPhoto',
+      'isUseAlbum',
+      'isShowErrorNotResolve',
+      'isShowErrorResolve',
+      'isShowErrorType',
+      'site_id',
+      'roomInfo',
+      'plan_list_id',
+      'deviceType',
+      'referenceField_hf4dmgc',
+      'referenceField_ghe7oxh',
+      'referenceField_khku11h',
+      'referenceField_cxyom0w',
+      'region',
+      'item_type',
+      'sortNumber',
+      'referenceField_jfjimls',
+      'option_1xe2tou',
+      'text_l4qsi3k',
+      'contentName',
+      'referenceField_pw4kfh1'
+    ],
+    filter: [
+      {
+        and: [
+          {
+            leftValue: 'plan_list_id',
+            operator: 'eq',
+            rightValue: params.planId
+          },
+          {
+            leftValue: 'plan_list_id.option_iqefg30', // 进行中任务
+            operator: 'eq',
+            rightValue: 'option_yy6r7c0'
+          },
+          {
+            leftValue: 'site_id._id',
+            operator: 'eq',
+            rightValue: params.siteId
+          },
+          {
+            leftValue: 'item_id.lookup_0py8fla._id',
+            operator: 'eq',
+            rightValue: `${params.floorId}`
+          },
+          {
+            leftValue: 'item_id.lookup_at96fh8._id',
+            operator: 'eq',
+            rightValue: `${params.roomId}`
+          },
+          {
+            leftValue: 'item_id.option_j8wwovx', //设备启用
+            operator: 'eq',
+            rightValue: 'option_iuacks9'
+          },
+          {
+            or: [
+              {
+                leftValue: 'delete_status', //任务未被删除
+                operator: 'eq',
+                rightValue: 'option_using'
+              },
+              {
+                leftValue: 'delete_status', //任务未被删除
+                operator: 'eq',
+                rightValue: null
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    sort: [
+      {
+        direction: 'desc',
+        field: 'sortNumber'
+      }
+    ],
+    limit: 200,
+    offset: 0
+  };
+  return httpService.post(
+    `/api/data/v1/namespaces/package_copysa30x__c/objects/task_list/records`,
+    { data }
+  );
+};
+
+/**
+ * 获取巡检记录列表
+ * @param {String} roomTaskId
+ * @returns
+ */
+export const getHistoryTaskList = (roomTaskId) => {
+  const data = {
+    fields: [
+      '_id',
+      'isShowNothaveitem',
+      '_createdAt',
+      'item_id',
+      'roomresult',
+      'isPhoto',
+      'isMustPhoto',
+      'isUseAlbum',
+      'isShowErrorResolve',
+      'item_type',
+      'taskPhoto',
+      'option_n78g80c',
+      'referenceField_dfmgbl4',
+      'errorSub',
+      'serviceList',
+      'referenceField_dc259wd',
+      'richText_4ynjot5',
+      'referenceField_dc259wd',
+      'isShowErrorType'
+    ], //option_n78g80c为巡检结果 referenceField_dfmgbl4巡检类型 referenceField_dc259wd设施类型 richText_4ynjot5巡检异常描述(富文本) referenceField_dc259wd 设施类型
+    filter: [
+      {
+        and: [
+          {
+            leftValue: 'roomresult._id', // 进行中任务
+            operator: 'eq',
+            rightValue: roomTaskId
+          }
+        ]
+      }
+    ],
+    limit: 20,
+    offset: 0
+  };
+  return httpService.post(
+    `/api/data/v1/namespaces/package_copysa30x__c/objects/record_list/records`,
+    { data }
+  );
+};
+/**
+ * 获取故障类型
+ * @param {*} deviceType
+ * @returns
+ */
+export const getFaultTypeList = (deviceType) => {
+  const data = {
+    fields: [
+      '_id',
+      'errorType',
+      'errorDetails',
+      'multilingual_1wfba75',
+      'errorDecribeMulti',
+      'display'
+    ],
+    filter: [
+      {
+        and: [
+          {
+            leftValue: 'deviceType',
+            operator: 'eq',
+            rightValue: deviceType
+          }
+        ]
+      }
+    ],
+    sort: [
+      {
+        direction: 'desc',
+        field: '_createdAt'
+      }
+    ],
+    limit: 50,
+    offset: 0
+  };
+  return httpService.post(
+    `/api/data/v1/namespaces/package_copysa30x__c/objects/object_0hvul78/records`,
+    { data }
+  );
+};
+/**
+ * 上传文件
+ * @param {*} filePath
+ */
+export const uploadTaskFile = async (filePath) => {
+  console.log(filePath);
+  console.log(filePath.split('/')[3]);
+  return Taro.uploadFile({
+    url: `${apiConfig.baseUrl}/api/attachment/v1/files`, //仅为示例，非真实的接口地址
+    filePath: filePath,
+    name: 'file',
+    header: {
+      Authorization: Taro.getStorageSync('TOKEN')
+    }
+  });
+};
+
+/**
+ * 获取无需巡检项列表
+ * @param {String} roomType
+ * @returns
+ */
+export const getNoNeedPatrolList = (roomType) => {
+  const data = {
+    // _id 、 无需巡检名称 、 是否展示无需巡检描述 、 备注是否必填
+    fields: ['_id', 'noNeedPatrolName', 'showNoNeedPatrolComment', 'isCommentRequired'],
+    filter: [
+      {
+        and: [
+          {
+            leftValue: 'roomTypeObject',
+            operator: 'eq',
+            rightValue: roomType
+          }
+        ]
+      }
+    ]
+  };
+  return httpService.post(
+    `/api/data/v1/namespaces/package_copysa30x__c/objects/object_8c7g90v/records`,
+    { data }
+  );
+};
+
+// export const getFileInfo = (fileId) => {
+//   const data = {};
+//   return httpService.get(
+//     `/api/attachment/v1/files/${String(fileId)}`,
+//     { data }
+//   );
+// };
+
+export const getFileInfo = (fileId) => {
+  return Taro.request({
+    url: `https://ae-openapi.feishu.cn/api/attachment/v1/files/${String(fileId)}`,
+    method: 'GET',
+    responseType: 'arraybuffer',
+    header: {
+      Authorization: Taro.getStorageSync('TOKEN')
+    }
+  });
+};
+/**
+ * 获取房间对象信息
+ */
+export const getRoomObjectByOmmId = (ommId, siteId) => {
+  let newOmmId = '-1';
+  if (ommId) {
+    newOmmId = ommId;
+  }
+  const data = {
+    fields: ['_id'],
+    filter: [
+      {
+        and: [
+          {
+            leftValue: 'roomid',
+            operator: 'eq',
+            rightValue: newOmmId
+          },
+          {
+            leftValue: 'lookup_kv79yvp',
+            operator: 'eq',
+            rightValue: siteId
+          }
+        ]
+      }
+    ]
+  };
+
+  return httpService.post(
+    `/api/data/v1/namespaces/package_copysa30x__c/objects/object_jslamqj/records`,
+    { data }
+  );
+};
+
+/**
+ * 获取当前站点的巡检量
+ * @param {String} siteId //站点ID
+ * @param {Number} site_timezone //时区
+ * @returns
+ */
+export const getInspectionVolumCurrentSite = (siteId, site_timezone) => {
+  const data = {
+    params: {
+      site_id: siteId,
+      site_timezone: site_timezone
+    }
+  };
+
+  return httpService.post(
+    `/api/cloudfunction/v1/namespaces/package_copysa30x__c/invoke/inspection_volum_statistics_current_site`,
+    { data }
+  );
+};
